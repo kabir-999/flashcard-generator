@@ -1,0 +1,12 @@
+services:
+  - name: flashcard-generator
+    type: web
+    runtime: docker
+    repo: https://github.com/YOUR_GITHUB/flashcard-generator
+    branch: main
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+    plan: free
+    region: oregon
+    dockerCommand: gunicorn -b 0.0.0.0:5000 app:app

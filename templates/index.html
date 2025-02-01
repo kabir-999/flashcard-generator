@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Flashcard Generator</title>
+</head>
+<body>
+    <h1>AI Flashcard Generator</h1>
+    <input type="file" id="fileInput" accept=".pdf">
+    <button id="uploadBtn">Generate Flashcards</button>
+
+    <h2>Generated Flashcards:</h2>
+    <ul id="flashcardList"></ul>
+
+    <script>
+        document.getElementById("uploadBtn").addEventListener("click", function () {
+            const fileInput = document.getElementById("fileInput");
+            if (!fileInput.files.length) {
+                alert("Please upload a file.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append("pdf_file", file);
+
+            document.getElementById("flashcardList").innerHTML = ""; // Clear previous flashcards
+
+            fetch("/generate", {
+                method: "POST",
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error("Failed to generate flashcards.");
+                }
+                return response.body;
+            })
+            .then(body => {
+                const reader = body.getReader();
+                const decoder = new TextDecoder();
+                let currentFlashcard = { front: null, back: null };
+
+                function processStream({ done, value }) {
+                    if (done) return;
+                    const chunk = decoder.decode(value, { stream: true });
+
+                    chunk.split("\n\n").forEach(line => {
+                        if (line.startsWith("data: ")) {
+                            try {
+                                const jsonData = JSON.parse(line.replace("data: ", "").trim());
+
+                                if (jsonData.error) {
+                                    const errorDiv = document.createElement("div");
+                                    errorDiv.style.color = "red";
+                                    errorDiv.innerHTML = `⚠️ Error: ${jsonData.error}`;
+                                    document.body.appendChild(errorDiv);
+                                }
+                                else if (jsonData.front) {
+                                    // Create new list item for front
+                                    const li = document.createElement("li");
+                                    li.innerHTML = `<strong>Front:</strong> ${jsonData.front}`;
+                                    document.getElementById("flashcardList").appendChild(li);
+                                    currentFlashcard = { li, front: jsonData.front, back: null };
+                                } 
+                                else if (jsonData.back && currentFlashcard.front) {
+                                    setTimeout(() => {
+                                        currentFlashcard.li.innerHTML += `<br><strong>Back:</strong> ${jsonData.back}`;
+                                    }, 3000);
+                                }
+                            } catch (e) {
+                                console.error("❌ JSON Parse Error:", e, "Received:", line);
+                            }
+                        }
+                    });
+
+                    reader.read().then(processStream);
+                }
+
+                reader.read().then(processStream);
+            })
+            .catch(error => {
+                console.error("❌ Error:", error);
+                alert("Server error. Check Flask logs.");
+            });
+        });
+    </script>
+</body>
+</html>
