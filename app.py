@@ -34,27 +34,39 @@ def extract_text_from_pdf(pdf_path):
     with fitz.open(pdf_path) as doc:
         for page in doc:
             text += page.get_text("text") + "\n"
+
+    print("\n📄 Extracted PDF Text:\n", text[:1000], "\n...")  # Debug: Show first 1000 characters
     return text.strip()
 
 # Function to generate flashcards
 def generate_flashcards(extracted_text):
     try:
+        if not extracted_text.strip():
+            return {"error": "PDF text extraction failed or is empty."}
+
+        # Send extracted text to Gemini API
         chat_session = model.start_chat(history=[])
         response = chat_session.send_message(extracted_text)
 
-        if not response.text:
+        print("\n🤖 Raw API Response:\n", response.text)  # Debugging output
+
+        if not response.text or response.text.strip() == "":
             return {"error": "No flashcards generated."}
 
+        # Split response into flashcards
         flashcards = response.text.strip().split("\n\n")
         structured_flashcards = []
 
         for flashcard in flashcards:
             if "**Front:**" in flashcard and "**Back:**" in flashcard:
                 front, back = flashcard.split("**Back:**", 1)
-                structured_flashcards.append({
-                    "front": front.replace("**Front:**", "").strip(),
-                    "back": back.strip()
-                })
+                front = front.replace("**Front:**", "").strip()
+                back = back.strip()
+
+                structured_flashcards.append({"front": front, "back": back})
+
+        if not structured_flashcards:
+            return {"error": "No valid flashcards detected in API response."}
 
         return {"flashcards": structured_flashcards}
 
