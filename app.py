@@ -35,7 +35,7 @@ def extract_text_from_pdf(pdf_path):
         for page in doc:
             text += page.get_text("text") + "\n"
 
-    print("\n📄 Extracted PDF Text:\n", text[:1000], "\n...")  # Debug: Show first 1000 characters
+    print("\n📄 Extracted PDF Text (First 500 chars):\n", text[:500])  # Debugging Log
     return text.strip()
 
 # Function to generate flashcards
@@ -44,29 +44,31 @@ def generate_flashcards(extracted_text):
         if not extracted_text.strip():
             return {"error": "PDF text extraction failed or is empty."}
 
-        # Send extracted text to Gemini API
+        # Properly formatted prompt for Gemini
+        prompt = f"Generate educational flashcards from the following content:\n\n{extracted_text}"
         chat_session = model.start_chat(history=[])
-        response = chat_session.send_message(extracted_text)
+        response = chat_session.send_message(prompt)
 
-        print("\n🤖 Raw API Response:\n", response.text)  # Debugging output
+        print("\n🤖 Raw API Response:\n", response.text)  # Debugging Log
 
         if not response.text or response.text.strip() == "":
-            return {"error": "No flashcards generated."}
+            return {"error": "No flashcards generated. API response empty."}
 
-        # Split response into flashcards
+        # Process response into JSON format
         flashcards = response.text.strip().split("\n\n")
         structured_flashcards = []
 
         for flashcard in flashcards:
             if "**Front:**" in flashcard and "**Back:**" in flashcard:
                 front, back = flashcard.split("**Back:**", 1)
-                front = front.replace("**Front:**", "").strip()
-                back = back.strip()
+                structured_flashcards.append({
+                    "front": front.replace("**Front:**", "").strip(),
+                    "back": back.strip()
+                })
 
-                structured_flashcards.append({"front": front, "back": back})
-
-        if not structured_flashcards:
-            return {"error": "No valid flashcards detected in API response."}
+        # Save flashcards to a JSON file
+        with open("flashcards.json", "w", encoding="utf-8") as json_file:
+            json.dump({"flashcards": structured_flashcards}, json_file, indent=4)
 
         return {"flashcards": structured_flashcards}
 
