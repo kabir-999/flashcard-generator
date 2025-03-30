@@ -1,8 +1,7 @@
 import os
 import fitz  # PyMuPDF for extracting text from PDFs
-import time
 import json
-from flask import Flask, request, Response, render_template, stream_with_context, jsonify
+from flask import Flask, request, jsonify, render_template
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -21,13 +20,12 @@ generation_config = {
     "top_p": 0.95,
     "top_k": 40,
     "max_output_tokens": 8192,
-    "response_mime_type": "text/plain",
 }
 
 model = genai.GenerativeModel(
     model_name="gemini-2.0-flash-exp",
     generation_config=generation_config,
-    system_instruction="Generate concise, structured flashcards from the given content, preserving all key terms.",
+    system_instruction="Generate concise, structured flashcards from the given content, preserving all key terms."
 )
 
 # Function to extract text from a PDF file
@@ -38,42 +36,38 @@ def extract_text_from_pdf(pdf_path):
             text += page.get_text("text") + "\n"
     return text.strip()
 
-# Streaming Response for Flashcard Generation
-def generate_flashcards_stream(extracted_text):
+# Function to generate flashcards
+def generate_flashcards(extracted_text):
     try:
         chat_session = model.start_chat(history=[])
         response = chat_session.send_message(extracted_text)
 
         if not response.text:
-            yield f"data: {json.dumps({'error': 'No flashcards generated.'})}\n\n"
-            return
+            return {"error": "No flashcards generated."}
 
         flashcards = response.text.strip().split("\n\n")
+        structured_flashcards = []
 
         for flashcard in flashcards:
             if "**Front:**" in flashcard and "**Back:**" in flashcard:
                 front, back = flashcard.split("**Back:**", 1)
-                front = front.replace("**Front:**", "").strip()
-                back = back.strip()
+                structured_flashcards.append({
+                    "front": front.replace("**Front:**", "").strip(),
+                    "back": back.strip()
+                })
 
-                # Stream front first
-                yield f"data: {json.dumps({'front': front})}\n\n"
-                time.sleep(3)  # 3-second delay between front & back
-
-                # Stream back after delay
-                yield f"data: {json.dumps({'back': back})}\n\n"
-                time.sleep(1)  # 1-second delay before next flashcard
+        return {"flashcards": structured_flashcards}
 
     except Exception as e:
         print("❌ Error:", str(e))
-        yield f"data: {json.dumps({'error': str(e)})}\n\n"
+        return {"error": str(e)}
 
 @app.route("/")
 def home():
     return render_template("index.html")
 
 @app.route("/generate", methods=["POST"])
-def generate_flashcards():
+def generate_flashcards_api():
     if "pdf_file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
 
@@ -93,7 +87,8 @@ def generate_flashcards():
         if not extracted_text:
             return jsonify({"error": "Could not extract text from the PDF"}), 400
 
-        return Response(stream_with_context(generate_flashcards_stream(extracted_text)), content_type="text/event-stream")
+        flashcards_json = generate_flashcards(extracted_text)
+        return jsonify(flashcards_json)
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
