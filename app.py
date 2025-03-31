@@ -34,7 +34,7 @@ def extract_text_from_pdf(pdf_path):
     with fitz.open(pdf_path) as doc:
         for page in doc:
             text += page.get_text("text") + "\n"
-
+    
     print("\n📄 Extracted PDF Text (First 500 chars):\n", text[:500])  # Debugging Log
     return text.strip()
 
